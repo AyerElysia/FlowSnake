@@ -20,12 +20,12 @@ from lib.runtime import require_idle_gpu
 
 
 EXPECTED_SOURCE_SHA256 = "a337ba1566fe423c10a82dc4c08f8d6936ce8fc49ff1d61c8f735435854a337f"
-EXPECTED_MODEL_PARAMETERS = 17_264_208
-EXPECTED_TRAINABLE_PARAMETERS = 17_264_208
-EXPECTED_FLOW_TRAINABLE_PARAMETERS = 14_017_872
+EXPECTED_MODEL_PARAMETERS = 16_933_968
+EXPECTED_TRAINABLE_PARAMETERS = 16_933_968
+EXPECTED_FLOW_TRAINABLE_PARAMETERS = 13_687_632
 EXPECTED_REPLACER_TRAINABLE_PARAMETERS = 3_246_336
 EXPECTED_HA_SMOE_MISSING_PREFIXES = [
-    "net.gcn.denoiser._global_moe_router.",
+    "net.gcn.denoiser._contour_moe_router.",
     "net.gcn.denoiser.dit_layers.1.routed_moe.",
     "net.gcn.denoiser.dit_layers.3.routed_moe.",
     "net.gcn.denoiser.dit_layers.5.routed_moe.",

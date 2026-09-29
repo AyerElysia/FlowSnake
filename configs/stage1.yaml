@@ -11,7 +11,7 @@ resume_weights_only: true
 resume_path: 'artifacts/checkpoints/pure2d_moonvit_dense_step19000.pt'
 resume_allow_partial_copy: false
 resume_allowed_missing_prefixes:
-    - 'net.gcn.denoiser._global_moe_router.'
+    - 'net.gcn.denoiser._contour_moe_router.'
     - 'net.gcn.denoiser.dit_layers.1.routed_moe.'
     - 'net.gcn.denoiser.dit_layers.3.routed_moe.'
     - 'net.gcn.denoiser.dit_layers.5.routed_moe.'
@@ -20,7 +20,7 @@ train_or_test: train
 
 pure2d_memory_free_required: true
 pure2d_internal_detector_free_required: true
-pure2d_expected_parameter_count: 17264208
+pure2d_expected_parameter_count: 16933968
 
 train:
     dataset: 'VolMemTrain'
@@ -100,7 +100,7 @@ diffusion_disp_stats: 'data/stats/volmem_sagittal_disp_stats.json'
 dit_num_layers: 6
 dit_num_heads: 8
 dit_state_dim: 256
-# HA-SMoE is architectural, not a switch: one contour router emits E4 Top-2
+# HA-SMoE is architectural: one local-statistics contour router emits E4 Top-2
 # routes for DiT blocks 2/4/6; the shared FFNs and dense velocity head remain.
 iterative_fractions: [0.6667, 1.0]
 iterative_ode_steps: 4

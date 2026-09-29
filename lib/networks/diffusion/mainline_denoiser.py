@@ -459,7 +459,7 @@ class MainlineFlowDenoiser(nn.Module):
 
         # Human block numbers 2/4/6 map to zero-based Python indices 1/3/5.
         self._ha_smoe_layer_indices = (1, 3, 5)
-        self._global_moe_router = ContourRoutePath(
+        self._contour_moe_router = ContourRoutePath(
             dim=self.state_dim,
             num_routed_blocks=len(self._ha_smoe_layer_indices),
             num_experts=4,
@@ -548,12 +548,7 @@ class MainlineFlowDenoiser(nn.Module):
 
         local_context = self.local_proj(sampled_feat.transpose(1, 2))
         x = self.point_embed(x_t, sampled_feat)
-        route_path = self._global_moe_router(
-            x,
-            local_context,
-            global_context,
-            condition_embedding,
-        )
+        route_path = self._contour_moe_router(local_context)
         route_positions = {
             layer_index: route_index
             for route_index, layer_index in enumerate(self._ha_smoe_layer_indices)

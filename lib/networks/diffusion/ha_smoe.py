@@ -1,7 +1,7 @@
 """Heterogeneity-Aware Snake Mixture-of-Experts (HA-SMoE).
 
-The whole closed contour is the routing unit.  One router reads contour,
-local-image, global-image and Flow-condition summaries once and emits one
+The whole closed contour is the routing unit.  The router summarizes the
+sampled local image tokens with mean and standard deviation, then emits one
 expert-logit vector for each routed DiT block.  Every point on a contour uses
 the same Top-2 experts, preserving point cooperation and cyclic continuity.
 
@@ -29,7 +29,13 @@ def _normalized_entropy(probabilities: torch.Tensor) -> torch.Tensor:
 
 
 class ContourRoutePath(nn.Module):
-    """Emit all routed-block logits from one contour-level decision."""
+    """Emit all routed-block logits from one contour-level decision.
+
+    Only the mean and standard deviation of the sampled local image tokens are
+    used to choose experts.  The main DiT still receives its normal global
+    cross-attention, local cross-attention, and time/stage AdaLN conditioning;
+    those inputs are intentionally kept outside the expert router.
+    """
 
     def __init__(
         self,
@@ -51,7 +57,8 @@ class ContourRoutePath(nn.Module):
         self.num_routed_blocks = int(num_routed_blocks)
         self.num_experts = int(num_experts)
         self.temperature = float(temperature)
-        descriptor_dim = 7 * self.dim
+        descriptor_dim = 2 * self.dim
+        self.descriptor_dim = int(descriptor_dim)
         self.norm = nn.LayerNorm(descriptor_dim)
         self.trunk = nn.Sequential(
             nn.Linear(descriptor_dim, int(hidden_dim)),
@@ -74,34 +81,20 @@ class ContourRoutePath(nn.Module):
 
     def forward(
         self,
-        contour_tokens: torch.Tensor,
         local_image_tokens: torch.Tensor,
-        global_image_tokens: torch.Tensor,
-        condition_embedding: torch.Tensor,
     ) -> torch.Tensor:
-        sequences = (contour_tokens, local_image_tokens, global_image_tokens)
-        if any(tokens.ndim != 3 for tokens in sequences):
+        if local_image_tokens.ndim != 3:
             raise ValueError("router token inputs must have shape [N,L,D]")
-        batch_size = int(contour_tokens.shape[0])
-        if condition_embedding.shape != (batch_size, self.dim):
-            raise ValueError("condition embedding shape mismatch")
-        if any(
-            tokens.shape[0] != batch_size or tokens.shape[-1] != self.dim
-            for tokens in sequences
-        ):
-            raise ValueError("router token batch or channel mismatch")
-
-        descriptor_parts: list[torch.Tensor] = []
-        for tokens in sequences:
-            mean, scale = self._moments(tokens)
-            descriptor_parts.extend((mean, scale))
-        descriptor_parts.append(condition_embedding.float())
-        descriptor = torch.cat(descriptor_parts, dim=-1)
+        if local_image_tokens.shape[-1] != self.dim:
+            raise ValueError("router token channel mismatch")
+        batch_size = int(local_image_tokens.shape[0])
+        mean, scale = self._moments(local_image_tokens)
+        descriptor = torch.cat((mean, scale), dim=-1)
         hidden = self.trunk(self.norm(descriptor))
         logits = self.route_heads(hidden).view(
             batch_size, self.num_routed_blocks, self.num_experts
         )
-        self._last_logits = (logits / self.temperature).to(contour_tokens.dtype)
+        self._last_logits = (logits / self.temperature).to(local_image_tokens.dtype)
         return self._last_logits
 
     def diagnostics(self) -> dict[str, torch.Tensor]:
@@ -248,10 +241,10 @@ def collect_ha_smoe_diagnostics(module: nn.Module) -> dict[str, torch.Tensor]:
     """Collect compact router/expert health values after a forward pass."""
 
     diagnostics: dict[str, torch.Tensor] = {}
-    router = getattr(module, "_global_moe_router", None)
+    router = getattr(module, "_contour_moe_router", None)
     if router is not None:
         for key, value in router.diagnostics().items():
-            diagnostics[f"global.{key}"] = value
+            diagnostics[f"contour.{key}"] = value
     routed_indices = getattr(module, "_ha_smoe_layer_indices", ())
     layers = getattr(module, "dit_layers", ())
     for layer_index in routed_indices:

@@ -21,12 +21,8 @@ class HASMoEArchitectureTest(unittest.TestCase):
             num_experts=4,
             hidden_dim=48,
         )
-        logits = router(
-            torch.randn(2, 16, 32),
-            torch.randn(2, 16, 32),
-            torch.randn(2, 20, 32),
-            torch.randn(2, 32),
-        )
+        self.assertEqual(router.descriptor_dim, 64)
+        logits = router(torch.randn(2, 16, 32))
         self.assertEqual(tuple(logits.shape), (2, 3, 4))
         self.assertNotIn(16, logits.shape)
         diagnostics = router.diagnostics()
@@ -57,7 +53,7 @@ class HASMoEArchitectureTest(unittest.TestCase):
         model = MainlineFlowDenoiser()
         self.assertEqual(
             sum(parameter.numel() for parameter in model.parameters()),
-            14_017_872,
+            13_687_632,
         )
         self.assertEqual(model._ha_smoe_layer_indices, (1, 3, 5))
         routed = tuple(
@@ -69,7 +65,7 @@ class HASMoEArchitectureTest(unittest.TestCase):
         self.assertIsInstance(model.final_layer, DenseResidualFinalHead)
         state_names = tuple(model.state_dict())
         self.assertTrue(
-            any(name.startswith("_global_moe_router.") for name in state_names)
+            any(name.startswith("_contour_moe_router.") for name in state_names)
         )
         self.assertFalse(any("final_layer.experts" in name for name in state_names))
         self.assertFalse(any("routed_moe.router" in name for name in state_names))
@@ -78,7 +74,7 @@ class HASMoEArchitectureTest(unittest.TestCase):
         model = MainlineFlowDenoiser()
         full_state = model.state_dict()
         new_prefixes = (
-            "_global_moe_router.",
+            "_contour_moe_router.",
             "dit_layers.1.routed_moe.",
             "dit_layers.3.routed_moe.",
             "dit_layers.5.routed_moe.",
@@ -95,7 +91,7 @@ class HASMoEArchitectureTest(unittest.TestCase):
             all(name.startswith(new_prefixes) for name in incompatible.missing_keys)
         )
 
-    def test_full_forward_is_finite_and_reports_three_blocks(self):
+    def test_local_router_forward_is_finite_and_reports_three_blocks(self):
         torch.manual_seed(13)
         model = MainlineFlowDenoiser(
             state_dim=32,
@@ -117,7 +113,7 @@ class HASMoEArchitectureTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(prediction).all())
         self.assertTrue(torch.isfinite(regularization))
         diagnostics = model.moe_diagnostics()
-        self.assertTrue(any(key.startswith("global.") for key in diagnostics))
+        self.assertTrue(any(key.startswith("contour.") for key in diagnostics))
         for block in (2, 4, 6):
             self.assertTrue(
                 any(key.startswith(f"block{block}.") for key in diagnostics)

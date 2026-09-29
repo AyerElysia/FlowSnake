@@ -29,7 +29,7 @@
 
 GT box + GT anatomical class
   └─ Route-B：矩形 → 12 点八边形 → 128 点初始轮廓
-       └─ 14.018M HA-SMoE Flow
+       └─ 13.688M Local-statistics HA-SMoE Flow
             ├─ 一次轮廓级路由：[N, 3 blocks, 4 experts]
             ├─ DiT blocks 2/4/6：共享 Dense FFN + E4 Top-2 残差专家
             ├─ 单一 Dense 速度头
@@ -43,19 +43,19 @@ GT box + GT anatomical class
 | 组成 | 参数量 | Stage 1 | Stage 2 |
 |---|---:|---|---|
 | 继承的共享 Flow | 11,127,108 | 训练 | 训练 |
-| HA-SMoE router + 三组专家 | 2,890,764 | 训练 | 训练 |
-| 完整 HA-SMoE Flow | 14,017,872 | 训练 | 训练 |
+| HA-SMoE local router + 三组专家 | 2,560,524 | 训练 | 训练 |
+| Local-statistics HA-SMoE Flow | 13,687,632 | 训练 | 训练 |
 | MoonViT 特征替换器 | 3,246,336 | 训练 | 冻结 |
 | MoonViT 编码器 | 不进入训练图 | 冻结缓存 | 冻结缓存 |
-| 总模型 | 17,264,208 | 17,264,208 可训练 | 14,017,872 可训练 |
+| 总模型 | 16,933,968 | 16,933,968 可训练 | 13,687,632 可训练 |
 | Memory / 内部检测器 | 0 | 关闭 | 关闭 |
 
 ### 2.1 轮廓级路由到底是什么
 
-router 不为 128 个点分别选择专家。它先对以下三组 token 分别做整条轮廓的 mean/std 汇聚：轮廓 token、当前轮廓位置采样的局部图像 token、MoonViT 全局 token，再拼接时间与外阶段进度条件。得到的单个轮廓描述经过一个共享 trunk，一次输出三组 logits：
+router 不为 128 个点分别选择专家。它只对当前轮廓位置采样的局部图像 token 做整条轮廓的 mean/std 汇聚，得到单个轮廓的 local descriptor，再经过一个共享 trunk，一次输出三组 logits。Global/local cross-attention 和时间/阶段 AdaLN 仍由 DiT 主干正常使用，但不参与专家选择：
 
 ```text
-[contour mean/std, local mean/std, global mean/std, t+s]
+[local mean/std]
                          │
                 one contour router
                          │
@@ -191,11 +191,11 @@ Eagle/Embodied/work_dirs/1232_final_locany_full_more10000/checkpoint-3000
   --expected-step "$STAGE2_SOURCE_STEP"
 ```
 
-`status=PASS` 才能继续。它会读取真实 foreground 样本、核对 Train72 与锁定病例、严格加载完整 HA-SMoE checkpoint、检查 17,264,208 参数，并验证五阶段进度与傅里叶投影。
+`status=PASS` 才能继续。它会读取真实 foreground 样本、核对 Train72 与锁定病例、严格加载完整 HA-SMoE checkpoint、检查 16,933,968 参数，并验证五阶段进度与傅里叶投影。
 
 ## 6. Stage 1：监督训练
 
-唯一配置为 `configs/stage1.yaml`。它从签名的 MoonViT-cache Dense 主线 local step19000（由 absolute step40000 起训，等效 absolute step59000）做一次受控 weights-only 迁移。该文件是原 Dense MoonViT 长训保留下来的最高完整检查点；旧 absolute step40000 文件已不再作为发布依赖。所有原参数必须精确匹配，只允许新增全局轮廓 router 和第 2/4/6 层专家参数；不允许 shape 跳过、重叠拷贝或其他 missing/unexpected。随后建立新的 AdamW，不继承旧优化器状态。
+唯一配置为 `configs/stage1.yaml`。它从签名的 MoonViT-cache Dense 主线 local step19000（由 absolute step40000 起训，等效 absolute step59000）做一次受控 weights-only 迁移。该文件是原 Dense MoonViT 长训保留下来的最高完整检查点；旧 absolute step40000 文件已不再作为发布依赖。所有原参数必须精确匹配，只允许新增轮廓级 local-statistics router 和第 2/4/6 层专家参数；不允许 shape 跳过、重叠拷贝或其他 missing/unexpected。随后建立新的 AdamW，不继承旧优化器状态。
 
 固定 source：
 
@@ -216,7 +216,7 @@ SHA256 = a337ba1566fe423c10a82dc4c08f8d6936ce8fc49ff1d61c8f735435854a337f
 | local updates | 60,000 |
 | checkpoint | 每 1,000；保留 12 个 |
 | 里程碑 | 5k / 10k / 20k / 40k / 60k |
-| 可训练参数 | HA-SMoE Flow + 特征替换器，共 17,264,208 |
+| 可训练参数 | HA-SMoE Flow + 特征替换器，共 16,933,968 |
 | 初始化 | GT Route-B box-octagon + jitter |
 
 ### 6.1 两步预检
@@ -281,7 +281,7 @@ Stage 2 source 必须是 Stage 1 产生的完整 HA-SMoE checkpoint。选择后�
 
 ## 8. Stage 2：五阶段傅里叶 full-extrap GRPO
 
-唯一配置为 `configs/stage2_rl.yaml`。MoonViT 特征替换器逐 tensor 冻结，只更新完整的 14,017,872 个 HA-SMoE Flow 参数，其中包括共享 Flow、轮廓 router 和路由专家。
+唯一配置为 `configs/stage2_rl.yaml`。MoonViT 特征替换器逐 tensor 冻结，只更新 13,687,632 个 local-statistics HA-SMoE Flow 参数，其中包括共享 Flow、轮廓 router 和路由专家。
 
 ### 8.1 五阶段训练网格
 
@@ -447,7 +447,7 @@ FULL_OUT=data/outputs/inference_dev8_YYYYMMDD
   --smoke-slices 0
 ```
 
-完整运行必须处理 1,123 张 Dev8 切片，严格加载 17,264,208 参数，并输出：
+完整运行必须处理 1,123 张 Dev8 切片，严格加载 16,933,968 参数，并输出：
 
 - foreground IoU、Dice、mBoundF、HD95；
 - PQ、SQ、RQ、TP/FP/FN；

@@ -44,7 +44,7 @@ DEV8_CASES = (
 )
 LOCKED_CASES = {"sub-verse010", "sub-verse011", "sub-verse013"}
 EXPECTED_SLICES = 1123
-EXPECTED_PARAMETERS = 17264208
+EXPECTED_PARAMETERS = 16933968
 
 
 def parse_args(argv=None):

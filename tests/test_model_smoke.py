@@ -103,11 +103,11 @@ class MainlineModelSmokeTest(unittest.TestCase):
         wrapper = self.wrapper_type(network)
         self.assertEqual(
             sum(parameter.numel() for parameter in wrapper.parameters()),
-            17_264_208,
+            16_933_968,
         )
         self.assertEqual(
             sum(parameter.numel() for parameter in network.gcn.parameters()),
-            14_017_872,
+            13_687_632,
         )
         self.assertEqual(
             sum(

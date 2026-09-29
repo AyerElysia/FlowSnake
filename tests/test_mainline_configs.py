@@ -39,11 +39,11 @@ class MainlineConfigTest(unittest.TestCase):
         inference_source = (ROOT / "tools" / "infer.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("EXPECTED_PARAMETERS = 17264208", inference_source)
+        self.assertIn("EXPECTED_PARAMETERS = 16933968", inference_source)
 
     def test_stage1_contract(self):
         config = self.load("stage1.yaml")
-        self.assertEqual(config["pure2d_expected_parameter_count"], 17_264_208)
+        self.assertEqual(config["pure2d_expected_parameter_count"], 16_933_968)
         self.assertEqual(
             config["resume_path"],
             "artifacts/checkpoints/pure2d_moonvit_dense_step19000.pt",
@@ -55,7 +55,7 @@ class MainlineConfigTest(unittest.TestCase):
         self.assertEqual(
             config["resume_allowed_missing_prefixes"],
             [
-                "net.gcn.denoiser._global_moe_router.",
+                "net.gcn.denoiser._contour_moe_router.",
                 "net.gcn.denoiser.dit_layers.1.routed_moe.",
                 "net.gcn.denoiser.dit_layers.3.routed_moe.",
                 "net.gcn.denoiser.dit_layers.5.routed_moe.",
@@ -68,7 +68,7 @@ class MainlineConfigTest(unittest.TestCase):
 
     def test_stage2_fourier_delta_nsd_contract(self):
         config = self.load("stage2_rl.yaml")
-        self.assertEqual(config["pure2d_expected_parameter_count"], 17_264_208)
+        self.assertEqual(config["pure2d_expected_parameter_count"], 16_933_968)
         self.assertEqual(config["rl_fractions"], [0.2, 0.25, 0.3333, 0.5, 1.0])
         self.assertEqual(config["rl_deployment_fractions"], [0.6667, 1.0])
         self.assertEqual(config["rl_deployment_ode_steps"], 4)
